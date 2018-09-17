@@ -2,6 +2,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.UI;
 
 public class CheckerBoard : MonoBehaviour
 {
@@ -15,15 +16,24 @@ public class CheckerBoard : MonoBehaviour
     }
     #endregion
 
-    #region Variables
     [Header("Game Logic")]
     public Piece[,] pieces = new Piece[8, 8]; // 2D Array - https://www.cs.cmu.edu/~mrmiller/15-110/Handouts/arrays2D.pdf
     public GameObject whitePiecePrefab, blackPiecePrefab; // Prefabs to spawn
-    // Offset values of the board
     public Vector3 boardOffset = new Vector3(-4f, 0f, -4f);
     public Vector3 pieceOffset = new Vector3(.5f, .125f, .5f);
     public LayerMask hitLayers;
     public float rayDistance = 25f;
+    [Header("UI")]
+    public Transform chatMessageContainer;
+    public GameObject messagePrefab;
+    public GameObject highlightsContainer;
+    public Text nameTag;
+    public Transform canvas;
+    public CanvasGroup alertCanvas;
+    private float lastAlert;
+    private float winTime;
+    private bool alertActive;
+    private bool gameIsOver;
 
     private bool isWhite; // Is the current character white?
     private bool isWhiteTurn; // Is it white's turn?
@@ -33,35 +43,15 @@ public class CheckerBoard : MonoBehaviour
     private Vector2 mouseOver; // Mouse over value
     private Vector2 startDrag; // Position of start drag
     private Vector2 endDrag; // Position of end drag
-    #endregion
 
-    #region Unity Events
-    void Start()
+    private void Start()
     {
         // Generate the board on startup
         GenerateBoard();
     }
-
-    void SelectPiece(int x, int y)
+    private void Update()
     {
-        // Check if x and y is outside of bounds of pieces array    
-        if (x < 0 || x > pieces.GetLength(0) && 
-            y < 0 || y > pieces.GetLength(1))
-        {
-            return;
-        }
-
-        // SET Piece p to pieces[x,y]
-        Piece piece = pieces[x, y];
-        // IF p != null AND p.isWhite == isWhite
-        if (piece != null && !piece.isWhite)
-        {
-            selectedPiece = piece;
-            startDrag = mouseOver;
-        }
-    }
-    void Update()
-    {
+        // Update the mouse over value
         UpdateMouseOver();
 
         // Is is white's turn or black's turn?
@@ -70,75 +60,77 @@ public class CheckerBoard : MonoBehaviour
             // Convert coordinates to int (again to be sure)
             int x = (int)mouseOver.x;
             int y = (int)mouseOver.y;
-
-            // Select the piece - void SelectPiece(int x, int y)
+            // If mousebutton down
             if (Input.GetMouseButtonDown(0))
             {
+                // SelectPiece(x, y)
                 SelectPiece(x, y);
             }
-
-
             // Is there a selectedPiece currently?
             if (selectedPiece != null)
             {
                 // Update the drag position
                 UpdatePieceDrag(selectedPiece);
-
+                // if mouse up (mouse released)
                 if (Input.GetMouseButtonUp(0))
                 {
+                    // move piece physically
                     TryMove((int)startDrag.x, (int)startDrag.y, x, y);
                 }
             }
         }
     }
-    #endregion
-
-    #region Modifiers
-    void TryMove(int x1, int y1, int x2, int y2)
+    // Update the mouse over value
+    private void UpdateMouseOver()
     {
-        // Are any indexes out of bounds of the pieces array?
-        if (x1 < 0 || x1 > pieces.GetLength(0) ||
-            x2 < 0 || x2 > pieces.GetLength(0) ||
-            y1 < 0 || y1 > pieces.GetLength(1) ||
-            y2 < 0 || y2 > pieces.GetLength(1))
+        // Does the main camera not exist?
+        if (Camera.main == null)
         {
+            Debug.Log("Unable to find Main Camera");
+            // Exit the whole function
             return;
         }
 
-        // Is there a selectedPiece?
-        if (selectedPiece != null)
+        // Generate ray from mouse input to world
+        Ray camRay = Camera.main.ScreenPointToRay(Input.mousePosition);
+        RaycastHit hit;
+        // Perform raycast
+        if (Physics.Raycast(camRay, out hit, rayDistance, hitLayers))
         {
-            // Move the piece
-            MovePiece(selectedPiece, x2, y2);
-            // Update array
-            Piece temp = pieces[x1, y1];
-            pieces[x1, y1] = pieces[x2, y2];
-            pieces[x2, y2] = temp;
-
-            selectedPiece = null;
+            // Convert world position to an array index (by converting to int aswell)
+            mouseOver.x = (int)(hit.point.x - boardOffset.x);
+            mouseOver.y = (int)(hit.point.z - boardOffset.z);
+        }
+        else
+        {
+            // '-1' means nothing was selected
+            mouseOver.x = -1;
+            mouseOver.y = -1;
+        }
+    }
+    // Update the piece (drag it)
+    private void UpdatePieceDrag(Piece pieceToDrag)
+    {
+        // Does the main camera not exist?
+        if (Camera.main == null)
+        {
+            Debug.Log("Unable to find Main Camera");
+            // Exit the functions
+            return;
         }
 
+        // Generate ray from mouse input to world
+        Ray camRay = Camera.main.ScreenPointToRay(Input.mousePosition);
+        RaycastHit hit;
+        // Perform raycast
+        if (Physics.Raycast(camRay, out hit, rayDistance, hitLayers))
+        {
+            // Start dragging the piece and move it just above the cursor
+            pieceToDrag.transform.position = hit.point + Vector3.up;
+        }
     }
-    void MovePiece(Piece pieceToMove, int x, int y)
-    {
-        // Move the piece to world coordinates using x and y + offsets
-        Vector3 coordinate = new Vector3(x, 0f, y);
-        pieceToMove.transform.position = coordinate + boardOffset + pieceOffset;
-    }
-    #endregion
-
-    #region Generators
-    void GeneratePiece(bool isWhite, int x, int y)
-    {
-        GameObject prefab = isWhite ? whitePiecePrefab : blackPiecePrefab; // Which prefab is the piece?
-        GameObject clone = Instantiate(prefab) as GameObject; // Instantiate the prefab 
-        clone.transform.SetParent(transform); // Make checkerboard the parent of new piece
-        Piece pieceScript = clone.GetComponent<Piece>(); // Get the "Piece" Component from clone ('Piece' needs to be attached to prefabs)
-        pieces[x, y] = pieceScript; // Add piece component to array
-        MovePiece(pieceScript, x, y); // Move the piece to correct world position
-    }
-    // Generate the board pieces
-    void GenerateBoard()
+    // Generates entire board
+    private void GenerateBoard()
     {
         // Generate white team
         for (int y = 0; y < 3; y++)
@@ -172,55 +164,132 @@ public class CheckerBoard : MonoBehaviour
             }
         }
     }
-    #endregion
-
-    #region Updaters
-    void UpdateMouseOver()
+    // Generates a new piece
+    private void GeneratePiece(bool isWhite, int x, int y)
     {
-        // Does the main not camera exist?
-        if (Camera.main == null)
+        GameObject prefab = isWhite ? whitePiecePrefab : blackPiecePrefab; // Which prefab is the piece?
+        GameObject clone = Instantiate(prefab) as GameObject; // Instantiate the prefab 
+        clone.transform.SetParent(transform); // Make checkerboard the parent of new piece
+        Piece pieceScript = clone.GetComponent<Piece>(); // Get the "Piece" Component from clone ('Piece' needs to be attached to prefabs)
+        pieces[x, y] = pieceScript; // Add piece component to array
+        MovePiece(pieceScript, x, y); // Move the piece to correct world position
+    }
+    // Moves the piece to new coordinate (physically)
+    private void MovePiece(Piece pieceToMove, int x, int y)
+    {
+        // Move the piece to world coordinates using x and y + offsets
+        Vector3 coordinate = new Vector3(x, 0f, y);
+        pieceToMove.transform.position = coordinate + boardOffset + pieceOffset;
+    }
+    private void SelectPiece(int x, int y)
+    {
+        // Check if x and y is outside of bounds of pieces array
+        if (x < 0 || x > pieces.GetLength(0) ||
+           y < 0 || y > pieces.GetLength(1))
         {
-            Debug.Log("Unable to find Main Camera");
-            // Exit the whole function
+            // exit function
+            return;
+        }
+        // Set piece to pieces element at x and y coordinates 
+        Piece piece = pieces[x, y];
+        // Check if piece is not null and piece isn't white
+        if (piece != null && !piece.isWhite)
+        {
+            // Set selected piece to piece
+            selectedPiece = piece;
+            // Set startDrag to mouseOver 
+            startDrag = mouseOver;
+        }
+    }
+    // Applies rules of the game
+    private void TryMove(int x1, int y1, int x2, int y2)
+    {
+        // x1 = start x
+        // y1 = start y
+        // x2 = end x
+        // y2 = end y
+        // Are any indexes out of bounds?
+        if (x1 < 0 || x1 > pieces.GetLength(0) ||
+           x2 < 0 || x2 > pieces.GetLength(0) ||
+           y1 < 0 || y1 > pieces.GetLength(1) ||
+           y2 < 0 || y2 > pieces.GetLength(1))
+        {
+            // Exit the function
             return;
         }
 
-        // Generate ray from mouse input to world
-        Ray camRay = Camera.main.ScreenPointToRay(Input.mousePosition);
-        RaycastHit hit;
-        // Perform raycast
-        if (Physics.Raycast(camRay, out hit, rayDistance, hitLayers))
+        // Is there a selectedPiece?
+        if (selectedPiece != null)
         {
-            // Convert world position to an array index (by converting to int aswell)
-            mouseOver.x = (int)(hit.point.x - boardOffset.x);
-            mouseOver.y = (int)(hit.point.z - boardOffset.z);
-        }
-        else
-        {
-            // '-1' means nothing was selected
-            mouseOver.x = -1;
-            mouseOver.y = -1;
-        }
-    }
-    void UpdatePieceDrag(Piece pieceToDrag)
-    {
-        // Does the main camera not exist?
-        if (Camera.main == null)
-        {
-            Debug.Log("Unable to find Main Camera");
-            // Exit the functions
-            return;
+            // Move the piece
+            MovePiece(selectedPiece, x2, y2);
+            Piece newSlot = pieces[x2, y2];
+            if (newSlot)
+            {
+                // Move temp to 1
+                MovePiece(newSlot, x1, y1);
+            }
+            // Update array
+            Piece temp = pieces[x1, y1]; // save original to temp
+            pieces[x1, y1] = pieces[x2, y2]; // replace original with new
+            pieces[x2, y2] = temp; // replace second with temp
+            // Set selected to null;
+            selectedPiece = null;
         }
 
-        // Generate ray from mouse input to world
-        Ray camRay = Camera.main.ScreenPointToRay(Input.mousePosition);
-        RaycastHit hit;
-        // Perform raycast
-        if (Physics.Raycast(camRay, out hit, rayDistance, hitLayers))
+    }
+    public void Alert(string text)
+    {
+        // Get text component from alertCanvas children
+        alertCanvas.GetComponentInChildren<Text>().text = text;
+        // Set alertCanvas alpha to 1
+        alertCanvas.alpha = 1f;
+        // listAlert in time
+        lastAlert = Time.time;
+        // set alertActive to true
+        alertActive = true;
+    }
+    public void UpdateAlert()
+    {
+        // Calculate time since last alert
+        float timeDifference = Time.time - lastAlert;
+        // Is alertActive
+        if (alertActive)
         {
-            // Start dragging the piece and move it just above the cursor
-            pieceToDrag.transform.position = hit.point + Vector3.up;
+            // if time - lastAlert > 1.5 seconds
+            if (timeDifference > 1.5f)
+            {
+                // Set alertCanvas alpha to 1 - (time - lastAlert) - 1.5)
+                alertCanvas.alpha = 1 - timeDifference - 1.5f;
+                // if time - lastalert > 2.5
+                if (timeDifference > 2.5f)
+                {
+                    // Set alertActive to false
+                    alertActive = false;
+                }
+            }
         }
     }
-    #endregion
+    public void ChatMessage(string msg)
+    {
+        // Instantiate clone of messagePrefab
+        GameObject clone = Instantiate(messagePrefab);
+        // Set clone parent to chatMessageContainer
+        clone.transform.SetParent(chatMessageContainer);
+        // Get text component in children from clone
+        Text messageText = clone.GetComponentInChildren<Text>();
+        // set text component's text to message
+        messageText.text = msg;
+    }
+    public void SendChatMessage()
+    {
+        // Find Object of Type InputField 
+        InputField input = GameObject.Find("MessageInput").GetComponent<InputField>();
+        // If inputField.text is empty
+        if (input.text == "")
+            return;
+        // Call client.send("CMSG|" + text) - not implemented yet
+        // Set i.text to ""
+        input.text = "";
+    }
 }

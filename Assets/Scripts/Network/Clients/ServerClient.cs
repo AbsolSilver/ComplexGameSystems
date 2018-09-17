@@ -1,18 +1,16 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
+using System.Net.Sockets;
 using UnityEngine;
 
 public class ServerClient : MonoBehaviour
 {
 
-    // Use this for initialization
-    void Start()
-    {
+    public new string clientName;
+    public TcpClient tcp;
+    public bool isHost;
 
-    }
-
-    // Update is called once per frame
-    void Update()
+    public ServerClient(TcpClient tcp)
     {
 
     }

@@ -4,6 +4,8 @@ using UnityEngine;
 
 public class GameClient : MonoBehaviour
 {
+    public new string name;
+    public bool isHost;
 
     // Use this for initialization
     void Start()
